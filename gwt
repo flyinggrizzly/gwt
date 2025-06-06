@@ -77,13 +77,8 @@ function gwt() {
     basename "$(git rev-parse --show-toplevel 2>/dev/null)"
   }
 
-  _build_worktrees_repo_path() {
-    local repo_name="$(_get_repo_name)"
-    echo "$worktrees_path/$repo_name"
-  }
-
   _build_worktree_path() {
-    echo "$(_build_worktrees_repo_path)/$1"
+    echo "$worktrees_path/$(_get_repo_name)/$1"
   }
 
   # Helper function to check if branch has unmerged changes
@@ -112,6 +107,7 @@ function gwt() {
     local create_branch=false
     local branch_name=""
     local and_cd=false
+    local custom_path=""
 
     while [[ $# -gt 0 ]]; do
       case $1 in
@@ -123,6 +119,10 @@ function gwt() {
           and_cd=true
           shift
           ;;
+        --path|-p)
+          custom_path="$2"
+          shift 2
+          ;;
         *)
           branch_name="$1"
           shift
@@ -130,7 +130,10 @@ function gwt() {
       esac
     done
 
-    $DRY_RUN mkdir -p "$(_build_worktrees_repo_path)"
+    local worktree_path=${custom_path:-$(_build_worktree_path $branch_name)}
+    local worktree_parent_path=${worktree_path:h}
+
+    $DRY_RUN mkdir -p "$worktree_parent_path"
 
     if [[ $create_branch == true ]]; then
       if _branch_exists $branch_name; then
@@ -138,14 +141,14 @@ function gwt() {
         return 1
       fi
 
-      $DRY_RUN git worktree add -b "$branch_name" "$(_build_worktree_path $branch_name)"
+      $DRY_RUN git worktree add -b "$branch_name" "$worktree_path"
     else
       if ! _branch_exists $branch_name; then
         echo "Branch '$branch_name' does not exist."
         return 1
       fi
 
-      $DRY_RUN git worktree add "$(_build_worktree_path $branch_name)" "$branch_name"
+      $DRY_RUN git worktree add "$worktree_path" "$branch_name"
     fi
 
     if [[ $and_cd == true ]]; then
