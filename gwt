@@ -103,6 +103,33 @@ function gwt() {
     fi
   }
 
+  _resolve_branch_from_branch_or_path() {
+    local branch_or_path="$1"
+    if [[ "$branch_or_path" == /* || "$branch_or_path" == ~* || "$branch_or_path" == .* ]]; then
+      local abs_path="$(realpath "$input" 2>/dev/null || echo "$input")"
+
+      while IFS=':' read -r branch worktree_path; do
+        if [[ "$abs_path" == "$worktree_path" ]]; then
+          echo "$branch"
+          return 0
+        fi
+      done < <(_get_all_worktrees)
+
+      # Don't try do delete the main worktree
+      local main_repo="$(_get_main_repo)"
+      if [[ "$abs_path" == "$main_repo" ]]; then
+        echo "Error: Cannot delete the main worktree" >&2
+        return 1
+      fi
+
+      echo "Error: Path '$input' does not resolve to a worktree" >&2
+      return 1
+    else
+      echo "$branch_or_path"
+      return 0
+    fi
+  }
+
   _create() {
     local create_branch=false
     local branch_name=""
@@ -181,7 +208,9 @@ function gwt() {
   }
 
   _remove() {
-    local branch_name="$1"
+    local branch_or_path="$1"
+    local branch_name="$(_resolve_branch_from_branch_or_path $branch_or_path)"
+
     local force_remove=false
 
     if ! _branch_exists "$branch_name"; then
