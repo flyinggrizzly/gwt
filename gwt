@@ -28,19 +28,24 @@ function gwt() {
   }
 
   _get_all_worktrees() {
+    local include_main=false
+    if ([[ ${params[(r)-m]} == "-m" ]] || [[ ${params[(r)--with-main]} == "--with-main" ]]); then
+      include_main=true
+    fi
+
     local main_repo_path="$(_get_main_repo)"
 
-    git worktree list --porcelain | awk -v main_path="$main_repo_path" '
+    git worktree list --porcelain | awk -v main_path="$main_repo_path" -v include_main="$include_main" '
       /^worktree / { wt_path = substr($0, 10) }
       /^branch / { branch = substr($0, 8); gsub(/^refs\/heads\//, "", branch) }
       /^$/ {
-        if (wt_path && branch && wt_path != main_path) {
+        if (wt_path && branch && (include_main == "true" || wt_path != main_path)) {
           print branch ":" wt_path
         }
         wt_path=""; branch=""
       }
       END {
-        if (wt_path && branch && wt_path != main_path) {
+        if (wt_path && branch && (include_main == "true" || wt_path != main_path)) {
           print branch ":" wt_path
         }
       }
@@ -150,6 +155,9 @@ function gwt() {
       ;;
     cd)
       _cd "${(@)params}"
+      ;;
+    map)
+      _get_all_worktrees "${(@)params}"
       ;;
   esac
 }
