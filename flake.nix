@@ -65,7 +65,7 @@
       homeManagerModules.default =
         { pkgs, ... }:
         {
-          programs.zsh.initExtra = ''
+          programs.zsh.initContent = ''
             source ${self.packages.${pkgs.system}.default}/share/zsh/init.zsh
           '';
         };
