@@ -500,6 +500,66 @@ function gwt() {
     return 0
   }
 
+  _help() {
+    cat << 'EOF'
+gwt - Git Worktree Manager
+
+USAGE:
+    gwt <command> [options] [arguments]
+
+DESCRIPTION:
+    An opinionated git worktree manager that organizes worktrees in a sane
+    default location: ~/worktrees/<repo>/<branch>
+
+COMMANDS:
+    add, a <branch>          Create a worktree for the specified branch
+    cd, co [branch]          Change to worktree directory (or main if no branch)
+    remove, rm <branch|path> Remove a worktree by branch name or path
+    status, s                Show status of all worktrees
+    clean                    Remove all linked worktrees
+    init                     Initialize user settings
+    --help                   Show this help message
+
+ADD OPTIONS:
+    -b                       Create the branch if it doesn't exist
+    --cd                     Automatically cd to worktree after creation
+    --no-cd                  Don't cd to worktree (overrides autoCd setting)
+    --path, -p <path>        Use custom path instead of default location
+
+REMOVE OPTIONS:
+    --force, -f              Force removal even if dirty or has unpushed changes
+    --delete-branch, -db     Delete the branch after removing worktree
+                             (uses 'git branch -d', or 'git branch -D' with --force)
+    --preserve-branch, -pb   Keep the branch (overrides deleteBranchWithTree setting)
+
+STATUS OPTIONS:
+    --with-main, -m          Include main worktree in output and show TYPE column
+    --porcelain              Remove column headers for machine readability
+
+GLOBAL OPTIONS:
+    --dry-run                Show commands that would be executed without running them
+
+EXAMPLES:
+    gwt add -b feature --cd          Create new branch and worktree, then cd to it
+    gwt status -m                    Show all worktrees including main
+    gwt rm feature                   Remove worktree for 'feature' branch
+    gwt rm . --delete-branch         Remove current worktree and its branch
+    gwt rm feature -db -f            Force remove worktree and force delete branch
+    gwt clean --dry-run              Preview removal of all linked worktrees
+    gwt init                         Configure default settings
+
+CONFIGURATION:
+    Run 'gwt init' to set up persistent settings in ~/.config/gwt/settings.json:
+    - worktreeLocation: Default base path for worktrees
+    - autoCd: Automatically cd after creating worktrees
+    - deleteBranchWithTree: Auto-delete branches when removing worktrees
+
+REQUIREMENTS:
+    - Must be run from within a git repository
+    - 'jq' command required for gwt init
+EOF
+  }
+
   case $subcommand in
     add|a)
       _create "${(@)params}"
@@ -518,6 +578,9 @@ function gwt() {
       ;;
     init)
       _init "${(@)params}"
+      ;;
+    --help)
+      _help
       ;;
   esac
 }
