@@ -373,9 +373,6 @@ function gwt() {
     status|st|s)
       _status "${(@)params}"
       ;;
-    map)
-      _get_all_worktrees "${(@)params}"
-      ;;
   esac
 }
 
