@@ -145,7 +145,7 @@ function gwt() {
   }
 
   case $subcommand in
-    add)
+    add|a)
       _create "${(@)params}"
       ;;
     cd)
