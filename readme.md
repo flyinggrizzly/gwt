@@ -28,6 +28,35 @@ linked   my-branch    $HOME/worktrees/my-project/my-branch   dirty + unpushed
 
 ```
 
+## Installation
+
+- **Simple** - copy the `gwt` function somewhere that your zsh config will autosource it into your shell
+- **Nix home-manager flake** - use the flake as an input to nix home-manager, as below:
+
+```nix
+# home-manager flake.nix
+
+{
+  inputs = {
+    # Other inputs...
+
+    gwt = {
+      url = "github:flyinggrizzly/gwt";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { ... }: {
+    homeConfigurations.username = home-manager.lib.homeManagerConfiguration {
+      modules = [
+        inputs.gwt.homeManagerModules.default
+      ];
+    };
+  };
+}
+
+```
+
 ## Command reference
 
 ### `gwt add <branch>` - create a worktree
