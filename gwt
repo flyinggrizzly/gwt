@@ -81,25 +81,104 @@ function gwt() {
     echo "$worktrees_path/$(_get_repo_name)/$1"
   }
 
-  # Helper function to check if branch has unmerged changes
-  _has_unmerged_changes() {
+  _worktree_type() {
     local branch="$1"
-    local main_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')"
-    if [[ -z "$main_branch" ]]; then
-      main_branch="main"
+    if _worktree_exists "$branch"; then
+      local worktree_path="$(_worktree_path_for "$branch")"
+      if [[ -d "$worktree_path/.git" ]]; then
+        echo "main"
+      else
+        echo "linked"
+      fi
+      return 0
+    else
+      return 1
     fi
-    local merge_base="$(git merge-base "$main_branch" "$branch" 2>/dev/null)"
-    local branch_head="$(git rev-parse "$branch" 2>/dev/null)"
-    [[ -n "$merge_base" && -n "$branch_head" && "$merge_base" != "$branch_head" ]]
+  }
+
+  _has_unpushed_changes() {
+    local branch="$1"
+
+    local upstream=$(git rev-parse --abbrev-ref "$branch@{upstream}" 2>/dev/null)
+
+    if [[ -z "$upstream" ]]; then
+      return 1
+    fi
+
+    if [[ -n $(git log "$upstream..$branch" --oneline 2>/dev/null) ]]; then
+      return 0
+    else
+      return 1
+    fi
   }
 
   # Helper function to check if worktree is dirty
   _is_dirty() {
-    local worktree_path="$1"
-    if [[ -d "$worktree_path" ]]; then
-      ! git -C "$worktree_path" diff-index --quiet HEAD -- 2>/dev/null
+    local branch="$1"
+    local current_branch=$(git branch --show-current 2>/dev/null)
+
+    # If it's the current branch, check working directory status
+    if [[ "$branch" == "$current_branch" ]]; then
+      [[ -n $(git status --porcelain --untracked-files=no 2>/dev/null) ]]
     else
-      false
+      # Check if there's a worktree for this branch
+      local worktree_path=$(git worktree list --porcelain 2>/dev/null | awk -v branch="$branch" '
+      /^worktree/ { path = $2 }
+      /^branch/ && $2 == "refs/heads/" branch { print path; exit }
+      ')
+
+      if [[ -n "$worktree_path" ]]; then
+        # Check status in the worktree
+        [[ -n $(git -C "$worktree_path" status --porcelain --untracked-files=no 2>/dev/null) ]]
+      else
+        # No worktree for this branch
+        return 1
+      fi
+    fi
+  }
+
+  _has_untracked() {
+    local branch="$1"
+    local current_branch=$(git branch --show-current 2>/dev/null)
+    # If it's the current branch, check for untracked files
+    if [[ "$branch" == "$current_branch" ]]; then
+      [[ -n $(git ls-files --others --exclude-standard 2>/dev/null) ]]
+    else
+      # Check if there's a worktree for this branch
+      local worktree_path=$(git worktree list --porcelain 2>/dev/null | awk -v branch="$branch" '
+        /^worktree/ { path = $2 }
+        /^branch/ && $2 == "refs/heads/" branch { print path; exit }
+      ')
+      if [[ -n "$worktree_path" ]]; then
+        # Check for untracked files in the worktree
+        [[ -n $(git -C "$worktree_path" ls-files --others --exclude-standard 2>/dev/null) ]]
+      else
+        # No worktree for this branch
+        return 1
+      fi
+    fi
+  }
+
+  _worktree_status() {
+    local branch="$1"
+    if ! _worktree_exists "$branch"; then
+      return 1
+    fi
+
+    local status_string=()
+
+    if _is_dirty "$branch"; then
+      status_string+=("dirty")
+    fi
+
+    if _has_unpushed_changes "$branch"; then
+      status_string+=("unpushed")
+    fi
+
+    if [[ ${#status_string[@]} -eq 0 ]]; then
+      echo "clean"
+    else
+      echo "${(j: + :)status_string}"
     fi
   }
 
@@ -225,21 +304,55 @@ function gwt() {
       _cd # no args--go to parent. DRY_RUN will be handled by _cd
     fi
 
-    if [[ $force_flag -eq true ]]; then
+    if [[ $force_flag == true ]]; then
       $DRY_RUN git worktree remove -f "$rm_worktree_path"
     else
-      if _has_unmerged_changes "$branch_name"; then
-        echo "Branch '$branch_name' has unmerged changes. Use --force to remove anyway."
-        return 1
-      fi
+      local dirty="$(_is_dirty "$rm_worktree_path")"
+      local unpushed_commits="$(_has_unpushed_changes "$branch_name")"
 
-      if _is_dirty "$rm_worktree_path"; then
-        echo "Worktree for branch '$branch_name' is dirty. Use --force to remove anyway."
+      if [[ $unpushed_commits == true ]]; then
+        echo "Branch '$branch_name' has unpushed commits. Use --force to remove anyway."
         return 1
       fi
 
       $DRY_RUN git worktree remove "$rm_worktree_path"
     fi
+  }
+
+  _status() {
+    local show_headers=true
+    if [[ ${params[(r)--porcelain]} == "--porcelain" ]]; then
+      show_headers=false
+      params=(${params:#--porcelain})
+    fi
+
+    local show_type=false
+    if ([[ ${params[(r)-m]} == "-m" ]] || [[ ${params[(r)--with-main]} == "--with-main" ]]); then
+      show_type=true
+    fi
+
+    local status_string=""
+    if [[ $show_headers == true ]]; then
+      if [[ $show_type == true ]]; then
+        status_string+="TYPE|"
+      fi
+
+      status_string+="BRANCH|PATH|STATE"
+    fi
+
+    while IFS=':' read -r wt_branch wt_path; do
+      status_string+=$'\n'
+
+      if [[ $show_type == true ]]; then
+        status_string+=$(_worktree_type "$wt_branch")
+        status_string+="|"
+      fi
+
+      status_string+="$wt_branch|$wt_path|$(_worktree_status $wt_branch)\n"
+    done < <(_get_all_worktrees "${(@)params}") # passing params will surface -m|--with-main to _get_all_worktrees
+
+    echo -e "$status_string" | column -t -s '|'
+    return 0
   }
 
   case $subcommand in
@@ -251,6 +364,9 @@ function gwt() {
       ;;
     remove|rm)
       _remove "${(@)params}"
+      ;;
+    status|st|s)
+      _status "${(@)params}"
       ;;
     map)
       _get_all_worktrees "${(@)params}"
