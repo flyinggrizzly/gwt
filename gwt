@@ -291,6 +291,11 @@ function gwt() {
     local branch_name="$(_resolve_branch_from_branch_or_path $branch_or_path)"
 
     local force_remove=false
+    if ([[ ${params[(r)--force]} == "--force" ]] || [[ ${params[(r)-f]} == "-f" ]]); then
+      force_remove=true
+      params=(${params:#-f})
+      params=(${params:#--force})
+    fi
 
     if ! _branch_exists "$branch_name"; then
       echo "Branch '$branch_name' does not exist."
@@ -304,7 +309,7 @@ function gwt() {
       _cd # no args--go to parent. DRY_RUN will be handled by _cd
     fi
 
-    if [[ $force_flag == true ]]; then
+    if [[ $force_remove == true ]]; then
       $DRY_RUN git worktree remove -f "$rm_worktree_path"
     else
       local dirty="$(_is_dirty "$rm_worktree_path")"
