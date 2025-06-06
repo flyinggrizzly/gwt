@@ -115,9 +115,34 @@ function gwt() {
     return 0
   }
 
+  _cd() {
+    if [[ $# -eq 0 ]]; then
+      local main_repo="$(_get_main_repo)"
+
+      $DRY_RUN cd "$main_repo"
+      return 0
+    elif [[ $# -eq 1 ]]; then
+      local branch_name="$1"
+
+      if ! _worktree_exists $branch_name; then
+        echo "Worktree for branch '$branch_name' does not exist."
+        return 1
+      fi
+
+      $DRY_RUN cd "$(_build_worktree_path $branch_name)"
+      return 0
+    else
+      echo "Usage: gwt cd [branch_name]"
+      return 1
+    fi
+  }
+
   case $subcommand in
     add)
       _create "${(@)params}"
+      ;;
+    cd)
+      _cd "${(@)params}"
       ;;
   esac
 }
