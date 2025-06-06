@@ -66,6 +66,15 @@ function gwt() {
     basename "$(git rev-parse --show-toplevel 2>/dev/null)"
   }
 
+  _build_worktrees_repo_path() {
+    local repo_name="$(_get_repo_name)"
+    echo "$worktrees_path/$repo_name"
+  }
+
+  _build_worktree_path() {
+    echo "$(_build_worktrees_repo_path)/$1"
+  }
+
   _create() {
     local create_branch=false
     local branch_name=""
@@ -83,9 +92,7 @@ function gwt() {
       esac
     done
 
-    local wt_base="$worktrees_path/$(_get_repo_name)"
-    $DRY_RUN mkdir -p $wt_base
-    local wt_path="$wt_base/$branch_name"
+    $DRY_RUN mkdir -p "$(_build_worktrees_repo_path)"
 
     if [[ $create_branch == true ]]; then
       if _branch_exists $branch_name; then
@@ -93,7 +100,7 @@ function gwt() {
         return 1
       fi
 
-      $DRY_RUN git worktree add -b "$branch_name" "$wt_path"
+      $DRY_RUN git worktree add -b "$branch_name" "$(_build_worktree_path $branch_name)"
       return 0
     else
       if ! _branch_exists $branch_name; then
@@ -101,7 +108,7 @@ function gwt() {
         return 1
       fi
 
-      $DRY_RUN git worktree add "$wt_path" "$branch_name"
+      $DRY_RUN git worktree add "$(_build_worktree_path $branch_name)" "$branch_name"
       return 0
     fi
 
