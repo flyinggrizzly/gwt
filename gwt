@@ -360,6 +360,13 @@ function gwt() {
     return 0
   }
 
+  _clean() {
+    while IFS=':' read -r wt_branch wt_path; do
+      echo "Removing worktree for branch '$wt_branch' at '$wt_path'"
+      _remove "$wt_branch"
+    done < <(_get_all_worktrees)
+  }
+
   case $subcommand in
     add|a)
       _create "${(@)params}"
@@ -370,8 +377,11 @@ function gwt() {
     remove|rm)
       _remove "${(@)params}"
       ;;
-    status|st|s)
+    status|s)
       _status "${(@)params}"
+      ;;
+    clean)
+      _clean "${(@)params}"
       ;;
   esac
 }

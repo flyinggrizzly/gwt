@@ -80,6 +80,15 @@ the branch/worktree is dirty or has unpushed changes (only relevant if there is 
 - `--with-main|-m` also prints the primary worktree in the output, and adds a new column `TYPE` with a value of `main` or `linked` to designate the type of worktree
 - `--porcelain` removes the column headers to improve machine readability
 
+### `gwt clean` - remove all linked worktrees
+
+Removes all linked worktrees (excluding the main worktree). Useful for cleaning up after feature work is complete.
+
+#### Options
+
+- `--force|-f` override unpushed and dirty state checks and force deletion of all worktrees
+- `--dry-run` prefixes all destructive commands with `echo` so you can inspect the output before commiting
+
 ## Glossary
 
 - **primary/parent worktree:** the "main" location of the repo. This is identified by the worktree that includes a `.git/` directory, instead of a `.git` symlink that points to the main worktree's `.git/worktrees/<branch>`
