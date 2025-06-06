@@ -172,7 +172,7 @@ function gwt() {
         return 1
       fi
 
-      $DRY_RUN cd "$(_build_worktree_path $branch_name)"
+      $DRY_RUN cd "$(_worktree_path_for $branch_name)"
       return 0
     else
       echo "Usage: gwt cd [branch_name]"
