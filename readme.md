@@ -37,7 +37,8 @@ linked   my-branch    $HOME/worktrees/my-project/my-branch   dirty + unpushed
 #### Options
 
 - `-b` creates the branch if it does not exist
-- `--cd` automatically moves to the worktree after creation
+- `--cd` automatically moves to the worktree after creation. Not necessary if you set `autoCd` in `gwt init`
+- `--no-cd` the opposite of `--cd`. Useful for disabling `autoCd` from `init` for individual commands
 - `--path|-p` provide an explicit location for the worktree to be created, overriding the default
 - `--dry-run` prefixes all destructive commands with `echo` so you can inspect the output before commiting
 
@@ -65,6 +66,9 @@ the main worktree, and then remove the worktree.
 
 - `--force|-f` override unpushed and dirty state checks and force deletion
 - `--dry-run` prefixes all destructive commands with `echo` so you can inspect the output before commiting
+- `--delete-branch|-db` deletes the branch with `git branch -d` after removing the worktree. If `-f` is provided, uses `git branch -D` instead. Can be made automatic with `gwt init`
+- `--preserve-branch|-pb` ensures the branch is **not** deleted, even if the `--delete-branch` behavior is enabled with a flag or
+  `gwt init`
 
 ### `gwt status` - view the state of the repo's worktrees
 
@@ -88,6 +92,18 @@ Removes all linked worktrees (excluding the main worktree). Useful for cleaning 
 
 - `--force|-f` override unpushed and dirty state checks and force deletion of all worktrees
 - `--dry-run` prefixes all destructive commands with `echo` so you can inspect the output before commiting
+
+### `gwt init`
+
+Initializes persistent user settings in `~/.config/gwt/settings.json`.
+
+Allows setting of:
+
+- `autoCd` - makes the `--cd` flag on `gwt add` automatic
+- `worktreeLocation` - overrides the default `~/worktrees` starting path for storing worktrees
+- `deleteBranchWithTree` - sets up `gwt rm` to automatically run `git branch -d` (or `git branch -D` if the `-f` flag is set)
+
+**Requires `jq`.**
 
 ## Glossary
 

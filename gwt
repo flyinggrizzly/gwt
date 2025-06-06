@@ -1,7 +1,9 @@
 #!/bin/zsh
 
 function gwt() {
-  local worktrees_path="$HOME/worktrees"
+  local WORKTREE_BASE="$HOME/worktrees"
+  local AUTO_CD="false"
+  local DELETE_BRANCH_WITH_TREE="false"
 
   local subcommand=$1
   local params=("${(@)argv[2,-1]}")
@@ -11,6 +13,20 @@ function gwt() {
     DRY_RUN="echo"
     params=(${params:#--dry-run})
   fi
+
+  _load_user_settings() {
+    local settings_file="$HOME/.config/gwt/settings.json"
+    if [[ -f "$settings_file" ]]; then
+      local settings=$(jq -r '.' "$settings_file" 2>/dev/null)
+      if [[ $? -eq 0 ]]; then
+        WORKTREE_BASE=$(echo "$settings" | jq -r '.worktreeLocation')
+        AUTO_CD=$(echo "$settings" | jq -r '.autoCd')
+        DELETE_BRANCH_WITH_TREE=$(echo "$settings" | jq -r '.deleteBranchWithTree')
+      fi
+    fi
+  }
+
+  _load_user_settings
 
   _get_main_repo() {
     local main_repo=""
@@ -78,7 +94,7 @@ function gwt() {
   }
 
   _build_worktree_path() {
-    echo "$worktrees_path/$(_get_repo_name)/$1"
+    echo "$WORKTREE_BASE/$(_get_repo_name)/$1"
   }
 
   _worktree_type() {
@@ -209,10 +225,27 @@ function gwt() {
     fi
   }
 
+  _save_user_settings() {
+    local default_location="$1"
+    local auto_cd="$2"
+    local delete_branch_with_tree="$3"
+    local settings_dir="$HOME/.config/gwt"
+    local settings_file="$settings_dir/settings.json"
+
+    mkdir -p "$settings_dir"
+
+    jq -n \
+      --arg location "$default_location" \
+      --argjson autocd "$auto_cd" \
+      --argjson deletebranch "$delete_branch_with_tree" \
+      '{worktreeLocation: $location, autoCd: $autocd, deleteBranchWithTree: $deletebranch}' \
+      > "$settings_file"
+  }
+
   _create() {
     local create_branch=false
     local branch_name=""
-    local and_cd=false
+    local and_cd="$AUTO_CD"
     local custom_path=""
 
     while [[ $# -gt 0 ]]; do
@@ -223,6 +256,10 @@ function gwt() {
           ;;
         --cd)
           and_cd=true
+          shift
+          ;;
+        --no-cd)
+          and_cd=false
           shift
           ;;
         --path|-p)
@@ -297,6 +334,18 @@ function gwt() {
       params=(${params:#--force})
     fi
 
+    local rm_branch_after=$DELETE_BRANCH_WITH_TREE
+    if ([[ ${params[(r)--delete-branch]} == "--delete-branch" ]] || [[ ${params[(r)-db]} == "-db" ]]); then
+      rm_branch_after=true
+      params=(${params:#-db})
+      params=(${params:#--delete-branch})
+    fi
+    if ([[ ${params[(r)--preserve-branch]} == "--preserve-branch" ]] || [[ ${params[(r)-pb]} == "-pb" ]]); then
+      rm_branch_after=false
+      params=(${params:#-pb})
+      params=(${params:#--preserve-branch})
+    fi
+
     if ! _branch_exists "$branch_name"; then
       echo "Branch '$branch_name' does not exist."
       return 1
@@ -311,6 +360,10 @@ function gwt() {
 
     if [[ $force_remove == true ]]; then
       $DRY_RUN git worktree remove -f "$rm_worktree_path"
+
+      if [[ $rm_branch_after == true ]]; then
+        $DRY_RUN git branch -D "$branch_name"
+      fi
     else
       local dirty="$(_is_dirty "$rm_worktree_path")"
       local unpushed_commits="$(_has_unpushed_changes "$branch_name")"
@@ -321,6 +374,9 @@ function gwt() {
       fi
 
       $DRY_RUN git worktree remove "$rm_worktree_path"
+      if [[ $rm_branch_after == true ]]; then
+        $DRY_RUN git branch -d "$branch_name"
+      fi
     fi
   }
 
@@ -367,6 +423,83 @@ function gwt() {
     done < <(_get_all_worktrees)
   }
 
+  _init() {
+    echo "GWT Configuration Setup"
+    echo "======================"
+    echo
+
+    # Configure default worktree location
+    echo "Current default worktree location: $WORKTREE_BASE"
+    echo -n "Enter new default worktree location (or press Enter to keep current): "
+    read new_location
+
+    if [[ -z "$new_location" ]]; then
+      new_location="$WORKTREE_BASE"
+    fi
+    new_location="${new_location/#\~/$HOME}"
+
+    # Configure auto-cd
+    echo
+    current_autocd="false"
+    if [[ "$AUTO_CD" == "true" ]]; then
+      current_autocd="true"
+    fi
+    echo "Current auto-cd setting: $current_autocd"
+    if [[ "$AUTO_CD" == "true" ]]; then
+      echo -n "Should 'gwt <branch>' automatically cd to the new worktree? (Y/n): "
+    else
+      echo -n "Should 'gwt <branch>' automatically cd to the new worktree? (y/N): "
+    fi
+    read autocd_input
+
+    local autocd_setting="false"
+    if [[ "$AUTO_CD" == "true" ]]; then
+      if [[ ! "$autocd_input" =~ ^[Nn] ]]; then
+        autocd_setting="true"
+      fi
+    else
+      if [[ "$autocd_input" =~ ^[Yy] ]]; then
+        autocd_setting="true"
+      fi
+    fi
+
+    # Configure delete-branch-with-tree
+    echo
+    current_delete_branch="false"
+    if [[ "$DELETE_BRANCH_WITH_TREE" == "true" ]]; then
+      current_delete_branch="true"
+    fi
+    echo "Current delete-branch-with-tree setting: $current_delete_branch"
+    if [[ "$DELETE_BRANCH_WITH_TREE" == "true" ]]; then
+      echo -n "Should 'gwt -d' also delete the branch by default? (Y/n): "
+    else
+      echo -n "Should 'gwt -d' also delete the branch by default? (y/N): "
+    fi
+    read delete_branch_input
+
+    local delete_branch_setting="false"
+    if [[ "$DELETE_BRANCH_WITH_TREE" == "true" ]]; then
+      if [[ ! "$delete_branch_input" =~ ^[Nn] ]]; then
+        delete_branch_setting="true"
+      fi
+    else
+      if [[ "$delete_branch_input" =~ ^[Yy] ]]; then
+        delete_branch_setting="true"
+      fi
+    fi
+
+    _save_user_settings "$new_location" "$autocd_setting" "$delete_branch_setting"
+
+    echo
+    echo "✓ Settings saved to ~/.config/gwt/settings.json"
+    echo "  Default worktree location: $new_location"
+    echo "  Auto-cd enabled: $autocd_setting"
+    echo "  Delete branch with tree: $delete_branch_setting"
+    echo
+    echo "Settings will take effect next time you use gwt."
+    return 0
+  }
+
   case $subcommand in
     add|a)
       _create "${(@)params}"
@@ -382,6 +515,9 @@ function gwt() {
       ;;
     clean)
       _clean "${(@)params}"
+      ;;
+    init)
+      _init "${(@)params}"
       ;;
   esac
 }
