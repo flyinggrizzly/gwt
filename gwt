@@ -78,11 +78,16 @@ function gwt() {
   _create() {
     local create_branch=false
     local branch_name=""
+    local and_cd=false
 
     while [[ $# -gt 0 ]]; do
       case $1 in
         -b)
           create_branch=true
+          shift
+          ;;
+        --cd)
+          and_cd=true
           shift
           ;;
         *)
@@ -101,7 +106,6 @@ function gwt() {
       fi
 
       $DRY_RUN git worktree add -b "$branch_name" "$(_build_worktree_path $branch_name)"
-      return 0
     else
       if ! _branch_exists $branch_name; then
         echo "Branch '$branch_name' does not exist."
@@ -109,10 +113,13 @@ function gwt() {
       fi
 
       $DRY_RUN git worktree add "$(_build_worktree_path $branch_name)" "$branch_name"
-      return 0
     fi
 
-    return 0
+    if [[ $and_cd == true ]]; then
+      _cd "$branch_name"
+    else
+      return 0
+    fi
   }
 
   _cd() {
