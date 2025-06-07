@@ -194,7 +194,7 @@ function gwt() {
     if [[ ${#status_string[@]} -eq 0 ]]; then
       echo "clean"
     else
-      echo "${(j: + :)status_string}"
+      echo "${(j:,:)status_string}"
     fi
   }
 
