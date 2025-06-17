@@ -5,8 +5,14 @@ function gwt() {
   local AUTO_CD="false"
   local DELETE_BRANCH_WITH_TREE="false"
 
-  local subcommand=$1
-  local params=("${(@)argv[2,-1]}")
+  local subcommand=""
+  local params
+  if [[ $1 != -* ]]; then
+    subcommand=$1
+    params=("${(@)argv[2,-1]}")
+  else
+    params=("${(@)argv[@]}")
+  fi
 
   local DRY_RUN=""
   if [[ ${params[(r)--dry-run]} == "--dry-run" ]]; then
@@ -570,9 +576,6 @@ EOF
     remove|rm)
       _remove "${(@)params}"
       ;;
-    status|s)
-      _status "${(@)params}"
-      ;;
     clean)
       _clean "${(@)params}"
       ;;
@@ -581,6 +584,9 @@ EOF
       ;;
     --help)
       _help
+      ;;
+    status|s|st|'')
+      _status "${(@)params}"
       ;;
   esac
 }
