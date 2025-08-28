@@ -591,3 +591,212 @@ EOF
   esac
 }
 
+# Tab completion setup
+if [[ -n "$ZSH_VERSION" ]] && (( $+functions[compdef] )); then
+  _gwt() {
+    local curcontext="$curcontext" state line
+    typeset -A opt_args
+
+    # Define the main subcommands
+    local -a subcommands
+    subcommands=(
+        'add:Create a worktree for the specified branch'
+        'cd:Change to worktree directory'
+        'remove:Remove a worktree'
+        'status:Show status of all worktrees'
+        'clean:Remove all linked worktrees'
+        'init:Initialize user settings'
+    )
+
+    # Main argument parsing
+    _arguments -C \
+        '1:command:->command' \
+        '*::arg:->args'
+
+    case $state in
+        command)
+            _describe -t commands 'gwt command' subcommands
+            ;;
+        args)
+            case $line[1] in
+                cd|co)
+                    _gwt_complete_worktree_branches
+                    ;;
+                add|a)
+                    _gwt_complete_add_command
+                    ;;
+                remove|rm)
+                    _gwt_complete_worktree_branches_or_path
+                    ;;
+                status|s|st)
+                    # No specific completions for status
+                    ;;
+                clean)
+                    # No specific completions for clean
+                    ;;
+                init)
+                    # No specific completions for init
+                    ;;
+            esac
+            ;;
+    esac
+  }
+
+  # Complete existing worktree branches
+  _gwt_complete_worktree_branches() {
+    local -a worktree_branches
+
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        return 1
+    fi
+
+    # Get main repo path to exclude it
+    local main_repo=""
+    while IFS= read -r worktree_line; do
+        local wt_path="$(echo "$worktree_line" | awk '{print $1}')"
+        if [[ -n "$wt_path" && -d "$wt_path/.git" ]]; then
+            main_repo="$wt_path"
+            break
+        fi
+    done < <(git worktree list)
+
+    # Get worktree branches using git worktree list
+    git worktree list --porcelain | awk -v main_path="$main_repo" '
+        /^worktree / { wt_path = substr($0, 10) }
+        /^branch / { branch = substr($0, 8); gsub(/^refs\/heads\//, "", branch) }
+        /^$/ {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+            wt_path=""; branch=""
+        }
+        END {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+        }
+    ' | while read branch; do
+        worktree_branches+=("$branch")
+    done
+
+    _describe -t branches 'worktree branch' worktree_branches
+  }
+
+  # Complete for add command
+  _gwt_complete_add_command() {
+    _gwt_complete_git_branches
+  }
+
+  # Complete git branches (excluding those with worktrees)
+  _gwt_complete_git_branches() {
+    local -a branches worktree_branches
+
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        return 1
+    fi
+
+    # Get all branches
+    branches=(${(f)"$(git branch --format='%(refname:short)' 2>/dev/null)"})
+
+    # Get main repo path to exclude it
+    local main_repo=""
+    while IFS= read -r worktree_line; do
+        local wt_path="$(echo "$worktree_line" | awk '{print $1}')"
+        if [[ -n "$wt_path" && -d "$wt_path/.git" ]]; then
+            main_repo="$wt_path"
+            break
+        fi
+    done < <(git worktree list)
+
+    # Get branches that already have worktrees
+    git worktree list --porcelain | awk -v main_path="$main_repo" '
+        /^worktree / { wt_path = substr($0, 10) }
+        /^branch / { branch = substr($0, 8); gsub(/^refs\/heads\//, "", branch) }
+        /^$/ {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+            wt_path=""; branch=""
+        }
+        END {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+        }
+    ' | while read branch; do
+        worktree_branches+=("$branch")
+    done
+
+    # Filter out branches that already have worktrees
+    local -a available_branches
+    for branch in "${branches[@]}"; do
+        if ! (( ${worktree_branches[(Ie)$branch]} )); then
+            available_branches+=("$branch")
+        fi
+    done
+
+    # Also include remote branches
+    local -a remote_branches
+    remote_branches=(${(f)"$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -v HEAD | sed 's|origin/||')"})
+
+    # Add unique remote branches
+    for branch in "${remote_branches[@]}"; do
+        if ! (( ${available_branches[(Ie)$branch]} )) && ! (( ${worktree_branches[(Ie)$branch]} )); then
+            available_branches+=("$branch")
+        fi
+    done
+
+    _describe -t branches 'git branch' available_branches
+  }
+
+  # Complete worktree branches or current directory path
+  _gwt_complete_worktree_branches_or_path() {
+    _gwt_complete_worktree_branches_or_dot
+  }
+
+  # Complete worktree branches or "."
+  _gwt_complete_worktree_branches_or_dot() {
+    local -a worktree_branches
+
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        return 1
+    fi
+
+    # Get main repo path to exclude it
+    local main_repo=""
+    while IFS= read -r worktree_line; do
+        local wt_path="$(echo "$worktree_line" | awk '{print $1}')"
+        if [[ -n "$wt_path" && -d "$wt_path/.git" ]]; then
+            main_repo="$wt_path"
+            break
+        fi
+    done < <(git worktree list)
+
+    # Get worktree branches using git worktree list
+    git worktree list --porcelain | awk -v main_path="$main_repo" '
+        /^worktree / { wt_path = substr($0, 10) }
+        /^branch / { branch = substr($0, 8); gsub(/^refs\/heads\//, "", branch) }
+        /^$/ {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+            wt_path=""; branch=""
+        }
+        END {
+            if (wt_path && branch && wt_path != main_path) {
+                print branch
+            }
+        }
+    ' | while read branch; do
+        worktree_branches+=("$branch")
+    done
+
+    _describe -t branches 'worktree branch' worktree_branches
+  }
+
+  compdef _gwt gwt
+fi
+
