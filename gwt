@@ -20,7 +20,7 @@ function gwt() {
     params=(${params:#--dry-run})
   fi
 
-  _load_user_settings() {
+  __gwt_load_user_settings() {
     local settings_file="$HOME/.config/gwt/settings.json"
     if [[ -f "$settings_file" ]]; then
       local settings=$(jq -r '.' "$settings_file" 2>/dev/null)
@@ -32,9 +32,9 @@ function gwt() {
     fi
   }
 
-  _load_user_settings
+  __gwt_load_user_settings
 
-  _get_main_repo() {
+  __gwt_get_main_repo() {
     local main_repo=""
     while IFS= read -r worktree_line; do
       local wt_path="$(echo "$worktree_line" | awk '{print $1}')"
@@ -49,13 +49,13 @@ function gwt() {
     echo "$main_repo"
   }
 
-  _get_all_worktrees() {
+  __gwt_get_all_worktrees() {
     local include_main=false
     if ([[ ${params[(r)-m]} == "-m" ]] || [[ ${params[(r)--with-main]} == "--with-main" ]]); then
       include_main=true
     fi
 
-    local main_repo_path="$(_get_main_repo)"
+    local main_repo_path="$(__gwt_get_main_repo)"
 
     git worktree list --porcelain | awk -v main_path="$main_repo_path" -v include_main="$include_main" '
       /^worktree / { wt_path = substr($0, 10) }
@@ -74,7 +74,7 @@ function gwt() {
     '
   }
 
-  _worktree_path_for() {
+  __gwt_worktree_path_for() {
     local branch="$1"
     while IFS=':' read -r wt_branch wt_path; do
       if [[ "$wt_branch" == "$branch" ]]; then
@@ -82,31 +82,31 @@ function gwt() {
         # Early return is safe since git itself enforces a 1:1 of branch:worktree
         return 0
       fi
-    done < <(_get_all_worktrees)
+    done < <(__gwt_get_all_worktrees)
     return 1
   }
 
-  _worktree_exists() {
-    _worktree_path_for "$1" >/dev/null 2>&1
+  __gwt_worktree_exists() {
+    __gwt_worktree_path_for "$1" >/dev/null 2>&1
   }
 
-  _branch_exists() {
+  __gwt_branch_exists() {
     local branch="$1"
     git show-ref --verify --quiet "refs/heads/$branch"
   }
 
-  _get_repo_name() {
+  __gwt_get_repo_name() {
     basename "$(git rev-parse --show-toplevel 2>/dev/null)"
   }
 
-  _build_worktree_path() {
-    echo "$WORKTREE_BASE/$(_get_repo_name)/$1"
+  __gwt_build_worktree_path() {
+    echo "$WORKTREE_BASE/$(__gwt_get_repo_name)/$1"
   }
 
-  _worktree_type() {
+  __gwt_worktree_type() {
     local branch="$1"
-    if _worktree_exists "$branch"; then
-      local worktree_path="$(_worktree_path_for "$branch")"
+    if __gwt_worktree_exists "$branch"; then
+      local worktree_path="$(__gwt_worktree_path_for "$branch")"
       if [[ -d "$worktree_path/.git" ]]; then
         echo "main"
       else
@@ -118,7 +118,7 @@ function gwt() {
     fi
   }
 
-  _has_unpushed_changes() {
+  __gwt_has_unpushed_changes() {
     local branch="$1"
 
     local upstream=$(git rev-parse --abbrev-ref "$branch@{upstream}" 2>/dev/null)
@@ -135,7 +135,7 @@ function gwt() {
   }
 
   # Helper function to check if worktree is dirty
-  _is_dirty() {
+  __gwt_is_dirty() {
     local branch="$1"
     local current_branch=$(git branch --show-current 2>/dev/null)
 
@@ -159,7 +159,7 @@ function gwt() {
     fi
   }
 
-  _has_untracked() {
+  __gwt_has_untracked() {
     local branch="$1"
     local current_branch=$(git branch --show-current 2>/dev/null)
     # If it's the current branch, check for untracked files
@@ -181,19 +181,19 @@ function gwt() {
     fi
   }
 
-  _worktree_status() {
+  __gwt_worktree_status() {
     local branch="$1"
-    if ! _worktree_exists "$branch"; then
+    if ! __gwt_worktree_exists "$branch"; then
       return 1
     fi
 
     local status_string=()
 
-    if _is_dirty "$branch"; then
+    if __gwt_is_dirty "$branch"; then
       status_string+=("dirty")
     fi
 
-    if _has_unpushed_changes "$branch"; then
+    if __gwt_has_unpushed_changes "$branch"; then
       status_string+=("unpushed")
     fi
 
@@ -204,7 +204,7 @@ function gwt() {
     fi
   }
 
-  _resolve_branch_from_branch_or_path() {
+  __gwt_resolve_branch_from_branch_or_path() {
     local branch_or_path="$1"
     if [[ "$branch_or_path" == /* || "$branch_or_path" == ~* || "$branch_or_path" == .* ]]; then
       local abs_path="$(realpath "$input" 2>/dev/null || echo "$input")"
@@ -214,10 +214,10 @@ function gwt() {
           echo "$branch"
           return 0
         fi
-      done < <(_get_all_worktrees)
+      done < <(__gwt_get_all_worktrees)
 
       # Don't try do delete the main worktree
-      local main_repo="$(_get_main_repo)"
+      local main_repo="$(__gwt_get_main_repo)"
       if [[ "$abs_path" == "$main_repo" ]]; then
         echo "Error: Cannot delete the main worktree" >&2
         return 1
@@ -231,7 +231,7 @@ function gwt() {
     fi
   }
 
-  _save_user_settings() {
+  __gwt_save_user_settings() {
     local default_location="$1"
     local auto_cd="$2"
     local delete_branch_with_tree="$3"
@@ -248,7 +248,7 @@ function gwt() {
       > "$settings_file"
   }
 
-  _create() {
+  __gwt_create() {
     local create_branch=false
     local branch_name=""
     local and_cd="$AUTO_CD"
@@ -279,20 +279,20 @@ function gwt() {
       esac
     done
 
-    local worktree_path=${custom_path:-$(_build_worktree_path $branch_name)}
+    local worktree_path=${custom_path:-$(__gwt_build_worktree_path $branch_name)}
     local worktree_parent_path=${worktree_path:h}
 
     $DRY_RUN mkdir -p "$worktree_parent_path"
 
     if [[ $create_branch == true ]]; then
-      if _branch_exists $branch_name; then
+      if __gwt_branch_exists $branch_name; then
         echo "Branch '$branch_name' already exists."
         return 1
       fi
 
       $DRY_RUN git worktree add -b "$branch_name" "$worktree_path"
     else
-      if ! _branch_exists $branch_name; then
+      if ! __gwt_branch_exists $branch_name; then
         echo "Branch '$branch_name' does not exist."
         return 1
       fi
@@ -301,27 +301,27 @@ function gwt() {
     fi
 
     if [[ $and_cd == true ]]; then
-      _cd "$branch_name"
+      __gwt_cd "$branch_name"
     else
       return 0
     fi
   }
 
-  _cd() {
+  __gwt_cd() {
     if [[ $# -eq 0 ]]; then
-      local main_repo="$(_get_main_repo)"
+      local main_repo="$(__gwt_get_main_repo)"
 
       $DRY_RUN cd "$main_repo"
       return 0
     elif [[ $# -eq 1 ]]; then
       local branch_name="$1"
 
-      if ! _worktree_exists $branch_name; then
+      if ! __gwt_worktree_exists $branch_name; then
         echo "Worktree for branch '$branch_name' does not exist."
         return 1
       fi
 
-      $DRY_RUN cd "$(_worktree_path_for $branch_name)"
+      $DRY_RUN cd "$(__gwt_worktree_path_for $branch_name)"
       return 0
     else
       echo "Usage: gwt cd [branch_name]"
@@ -329,9 +329,9 @@ function gwt() {
     fi
   }
 
-  _remove() {
+  __gwt_remove() {
     local branch_or_path="$1"
-    local branch_name="$(_resolve_branch_from_branch_or_path $branch_or_path)"
+    local branch_name="$(__gwt_resolve_branch_from_branch_or_path $branch_or_path)"
 
     local force_remove=false
     if ([[ ${params[(r)--force]} == "--force" ]] || [[ ${params[(r)-f]} == "-f" ]]); then
@@ -352,16 +352,16 @@ function gwt() {
       params=(${params:#--preserve-branch})
     fi
 
-    if ! _branch_exists "$branch_name"; then
+    if ! __gwt_branch_exists "$branch_name"; then
       echo "Branch '$branch_name' does not exist."
       return 1
     fi
 
-    local rm_worktree_path="$(_worktree_path_for $branch_name)"
+    local rm_worktree_path="$(__gwt_worktree_path_for $branch_name)"
 
     local current_dir="$(pwd)"
       if [[ "$current_dir" == "$rm_worktree_path" ]]; then
-      _cd # no args--go to parent. DRY_RUN will be handled by _cd
+      __gwt_cd # no args--go to parent. DRY_RUN will be handled by __gwt_cd
     fi
 
     if [[ $force_remove == true ]]; then
@@ -371,8 +371,8 @@ function gwt() {
         $DRY_RUN git branch -D "$branch_name"
       fi
     else
-      local dirty="$(_is_dirty "$rm_worktree_path")"
-      local unpushed_commits="$(_has_unpushed_changes "$branch_name")"
+      local dirty="$(__gwt_is_dirty "$rm_worktree_path")"
+      local unpushed_commits="$(__gwt_has_unpushed_changes "$branch_name")"
 
       if [[ $unpushed_commits == true ]]; then
         echo "Branch '$branch_name' has unpushed commits. Use --force to remove anyway."
@@ -386,7 +386,7 @@ function gwt() {
     fi
   }
 
-  _status() {
+  __gwt_status() {
     local show_headers=true
     if [[ ${params[(r)--porcelain]} == "--porcelain" ]]; then
       show_headers=false
@@ -411,25 +411,25 @@ function gwt() {
       status_string+=$'\n'
 
       if [[ $show_type == true ]]; then
-        status_string+=$(_worktree_type "$wt_branch")
+        status_string+=$(__gwt_worktree_type "$wt_branch")
         status_string+="|"
       fi
 
-      status_string+="$wt_branch|$wt_path|$(_worktree_status $wt_branch)\n"
-    done < <(_get_all_worktrees "${(@)params}") # passing params will surface -m|--with-main to _get_all_worktrees
+      status_string+="$wt_branch|$wt_path|$(__gwt_worktree_status $wt_branch)\n"
+    done < <(__gwt_get_all_worktrees "${(@)params}") # passing params will surface -m|--with-main to __gwt_get_all_worktrees
 
     echo -e "$status_string" | column -t -s '|'
     return 0
   }
 
-  _clean() {
+  __gwt_clean() {
     while IFS=':' read -r wt_branch wt_path; do
       echo "Removing worktree for branch '$wt_branch' at '$wt_path'"
-      _remove "$wt_branch"
-    done < <(_get_all_worktrees)
+      __gwt_remove "$wt_branch"
+    done < <(__gwt_get_all_worktrees)
   }
 
-  _init() {
+  __gwt_init() {
     echo "GWT Configuration Setup"
     echo "======================"
     echo
@@ -494,7 +494,7 @@ function gwt() {
       fi
     fi
 
-    _save_user_settings "$new_location" "$autocd_setting" "$delete_branch_setting"
+    __gwt_save_user_settings "$new_location" "$autocd_setting" "$delete_branch_setting"
 
     echo
     echo "✓ Settings saved to ~/.config/gwt/settings.json"
@@ -506,7 +506,7 @@ function gwt() {
     return 0
   }
 
-  _help() {
+  __gwt_help() {
     cat << 'EOF'
 gwt - Git Worktree Manager
 
@@ -568,25 +568,25 @@ EOF
 
   case $subcommand in
     add|a)
-      _create "${(@)params}"
+      __gwt_create "${(@)params}"
       ;;
     cd|co) # If a worktree exists, we treat cd and checkout as the same operation for convenience
-      _cd "${(@)params}"
+      __gwt_cd "${(@)params}"
       ;;
     remove|rm)
-      _remove "${(@)params}"
+      __gwt_remove "${(@)params}"
       ;;
     clean)
-      _clean "${(@)params}"
+      __gwt_clean "${(@)params}"
       ;;
     init)
-      _init "${(@)params}"
+      __gwt_init "${(@)params}"
       ;;
     --help)
-      _help
+      __gwt_help
       ;;
     status|s|st|'')
-      _status "${(@)params}"
+      __gwt_status "${(@)params}"
       ;;
   esac
 }
