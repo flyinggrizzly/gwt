@@ -82,7 +82,7 @@ function gwt() {
         # Early return is safe since git itself enforces a 1:1 of branch:worktree
         return 0
       fi
-    done < <(__gwt_get_all_worktrees)
+    done < <(__gwt_get_all_worktrees "${(@)params}")
     return 1
   }
 
@@ -99,8 +99,49 @@ function gwt() {
     basename "$(git rev-parse --show-toplevel 2>/dev/null)"
   }
 
+  __gwt_get_repo_owner() {
+    local remote_url=""
+
+    # Try to get origin remote first
+    remote_url=$(git remote get-url origin 2>/dev/null)
+
+    # If no origin, get the first available remote
+    if [[ -z "$remote_url" ]]; then
+      remote_url=$(git remote -v 2>/dev/null | awk 'NR==1 {print $2}')
+    fi
+
+    # If no remotes at all, return empty
+    if [[ -z "$remote_url" ]]; then
+      echo ""
+      return 0
+    fi
+
+    # Extract owner from URL
+    local owner=""
+
+    # SSH format: git@host:owner/repo or git@host:owner/repo.git
+    if [[ "$remote_url" =~ ^git@[^:]+:([^/]+)/[^/]+(.git)?$ ]]; then
+      owner="${match[1]}"
+    # HTTPS format: https://host/owner/repo or https://host/owner/repo.git
+    elif [[ "$remote_url" =~ ^https?://[^/]+/([^/]+)/[^/]+(.git)?$ ]]; then
+      owner="${match[1]}"
+    # SSH with ssh:// format: ssh://git@host/owner/repo or ssh://git@host:port/owner/repo
+    elif [[ "$remote_url" =~ ^ssh://[^/]+/([^/]+)/[^/]+(.git)?$ ]]; then
+      owner="${match[1]}"
+    fi
+
+    echo "$owner"
+  }
+
   __gwt_build_worktree_path() {
-    echo "$WORKTREE_BASE/$(__gwt_get_repo_name)/$1"
+    local owner="$(__gwt_get_repo_owner)"
+    local repo_name="$(__gwt_get_repo_name)"
+
+    if [[ -n "$owner" ]]; then
+      echo "$WORKTREE_BASE/$owner/$repo_name/$1"
+    else
+      echo "$WORKTREE_BASE/$repo_name/$1"
+    fi
   }
 
   __gwt_worktree_type() {
@@ -415,8 +456,9 @@ function gwt() {
         status_string+="|"
       fi
 
-      status_string+="$wt_branch|$wt_path|$(__gwt_worktree_status $wt_branch)\n"
+      status_string+="$wt_branch|$wt_path|$(__gwt_worktree_status $wt_branch)"
     done < <(__gwt_get_all_worktrees "${(@)params}") # passing params will surface -m|--with-main to __gwt_get_all_worktrees
+
 
     echo -e "$status_string" | column -t -s '|'
     return 0
@@ -515,7 +557,7 @@ USAGE:
 
 DESCRIPTION:
     An opinionated git worktree manager that organizes worktrees in a sane
-    default location: ~/worktrees/<repo>/<branch>
+    default location: ~/worktrees/<owner>/<repo>/<branch> (or ~/worktrees/<repo>/<branch> if owner cannot be determined)
 
 COMMANDS:
     add, a <branch>          Create a worktree for the specified branch
@@ -798,5 +840,10 @@ if [[ -n "$ZSH_VERSION" ]] && (( $+functions[compdef] )); then
   }
 
   compdef _gwt gwt
+fi
+
+# Call the function if script is executed directly
+if [[ "${(%):-%x}" == "${0}" ]]; then
+  gwt "$@"
 fi
 
