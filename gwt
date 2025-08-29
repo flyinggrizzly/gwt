@@ -843,7 +843,9 @@ if [[ -n "$ZSH_VERSION" ]] && (( $+functions[compdef] )); then
 fi
 
 # Call the function if script is executed directly
-if [[ "${(%):-%x}" == "${0}" ]]; then
+# Check if the script is being executed (not sourced)
+# In zsh: when sourced, zsh_eval_context contains "file"
+if [[ ${zsh_eval_context[(r)file]} != "file" ]] && [[ "${zsh_eval_context[1]}" == "toplevel" ]]; then
   gwt "$@"
 fi
 
