@@ -33,7 +33,7 @@
           '';
 
           meta = with pkgs.lib; {
-            inherit description;
+            description = "gwt - an opinionated git worktree manager";
             license = licenses.gpl3;
             platforms = platforms.all;
           };
